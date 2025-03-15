@@ -1,8 +1,8 @@
 
 # Descrizione: Bot Discord HenryAI che si comporta come un membro naturale di una comunità di sviluppatori.
 # Autore: Henry8913
-# Data: 2025-14-03
-# Versione: 0.0.3
+# Data: 2025-15-03
+# Versione: 0.0.4
 
 import discord
 import os
@@ -111,13 +111,30 @@ async def analyze_code(code):
     return await ask_openrouter(f"{instruction}\n\nCodice:\n```\n{code}\n```")
 
 async def generate_code(prompt):
-    """Genera codice basato sul prompt fornito"""
+    """Genera codice completo basato sul prompt fornito"""
     instruction = (
-        "Genera codice in base alla richiesta. "
-        "Fornisci una soluzione completa e funzionante. "
-        "Includi commenti dove necessario."
+        "Genera una soluzione di codice COMPLETA e PRONTA ALL'USO che include TUTTE le parti necessarie:\n"
+        "- Per HTML: Includi DOCTYPE, html, head con meta tags, title, body completi\n"
+        "- Per Python: Includi tutti gli import necessari, classi complete, funzioni main\n"
+        "- Per JavaScript: Includi tutte le dichiarazioni, imports, configurazioni\n"
+        "- Per CSS: Includi tutti i selettori necessari, media queries, variabili\n"
+        "- Per React/JSX: Includi imports, componenti completi, props, exports\n"
+        "Il codice deve essere COMPLETAMENTE funzionante senza necessità di aggiungere parti mancanti.\n"
+        "NON USARE PLACEHOLDER O ELLISSI (...). Includi OGNI SINGOLA RIGA necessaria."
     )
-    return await ask_openrouter(f"{instruction}\n\nRichiesta: {prompt}")
+    response = await ask_openrouter(f"{instruction}\n\nRichiesta: {prompt}")
+    
+    # Formatta la risposta per una migliore leggibilità
+    formatted_response = "Ecco il codice completo e pronto all'uso:\n\n"
+    # Cerca blocchi di codice nella risposta e li formatta correttamente
+    code_blocks = re.findall(r'```(\w+)?\n(.*?)```', response, re.DOTALL)
+    if code_blocks:
+        for lang, code in code_blocks:
+            formatted_response += f"```{lang}\n{code.strip()}\n```\n\n"
+    else:
+        formatted_response += f"```\n{response}\n```"
+    
+    return formatted_response
 
 async def ask_openrouter(prompt, message_history=None, mentioned_users=None):
     """Invia una richiesta all'API di OpenRouter AI"""
