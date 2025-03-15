@@ -529,8 +529,9 @@ async def on_message(message):
         
         # A volte aggiungi una menzione esplicita all'autore del messaggio
         if random.random() < 0.25 and not any(f"<@{uid}" in response for uid in active_users.keys()):
-            # Aggiungi tag all'inizio se non c'è già una menzione
-            response = f"<@{message.author.id}> {response}"
+            # Aggiungi tag all'inizio se non c'è già una menzione e non è il bot stesso
+            if message.author.id != client.user.id:
+                response = f"<@{message.author.id}> {response}"
         
         await message.channel.send(response)
         
