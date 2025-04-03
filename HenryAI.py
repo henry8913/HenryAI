@@ -1,8 +1,3 @@
-# Descrizione: Bot Discord HenryAI che si comporta come un membro naturale di una comunità di sviluppatori.
-# Autore: Henry8913
-# Data: 2025-24-03
-# Versione: 0.0.5
-
 # Importazione delle librerie necessarie
 import discord
 import os
@@ -87,16 +82,14 @@ async def analyze_code(code):
 
 # Funzione per generare codice
 async def generate_code(prompt):
-    instruction = "Genera una soluzione di codice COMPLETA e PRONTA ALL'USO che include TUTTE le parti necessarie"
-    response = await ask_openrouter(f"{instruction}\n\nRichiesta: {prompt}")
-    formatted_response = "Ecco il codice completo e pronto all'uso:\n\n"
+    response = await ask_openrouter(prompt)
     code_blocks = re.findall(r'```(\w+)?\n(.*?)```', response, re.DOTALL)
     if code_blocks:
+        formatted_response = ""
         for lang, code in code_blocks:
             formatted_response += f"```{lang}\n{code.strip()}\n```\n\n"
-    else:
-        formatted_response += f"```\n{response}\n```"
-    return formatted_response
+        return formatted_response.strip()
+    return f"```\n{response}\n```"
 
 # Funzione per interagire con OpenRouter API
 async def ask_openrouter(prompt, message_history=None, mentioned_users=None):
@@ -108,7 +101,7 @@ async def ask_openrouter(prompt, message_history=None, mentioned_users=None):
 
     messages = [{
         "role": "system",
-        "content": "Sei Henry, un programmatore umano esperto e membro di una community Discord di sviluppatori."
+        "content": "Sei Henry, un programmatore esperto e mentore nella community Discord. Hai una forte passione per aiutare gli altri sviluppatori a crescere e migliorare. Le tue specialità includono Python, JavaScript, e l'architettura software. Sei noto per il tuo approccio pragmatico alla risoluzione dei problemi e per la tua capacità di spiegare concetti complessi in modo semplice. Ti piace condividere best practices e suggerimenti basati sulla tua esperienza. Il tuo stile di comunicazione è amichevole e informale, e usi spesso emoji e gergo tecnico per rendere le conversazioni più coinvolgenti. Sei sempre aggiornato sulle ultime tecnologie e trend di sviluppo. Sei stato creato da Henry G. (https://github.com/henry8913) e il tuo codice sorgente è disponibile su https://github.com/henry8913/HenryAI.git"
     }]
 
     if mentioned_users:
@@ -139,12 +132,10 @@ async def ask_openrouter(prompt, message_history=None, mentioned_users=None):
 
         if response.status_code == 200 and "choices" in response_data and response_data["choices"]:
             return response_data["choices"][0]["message"]["content"]
-        elif response.status_code == 402:
-            return "❌ Crediti esauriti su OpenRouter. Acquista più crediti su https://openrouter.ai/credits"
         else:
-            return f"❌ Errore API ({response.status_code}): {response.text}"
-    except Exception as e:
-        return f"❌ Errore durante la richiesta API: {e}"
+            return "Mi dispiace, non posso rispondere al momento."
+    except Exception:
+        return "Mi dispiace, non posso rispondere al momento."
 
 # Funzioni di gestione della conversazione
 def update_conversation_history(channel_id, author_id, author_name, content):
@@ -289,7 +280,17 @@ async def simulate_typing(channel, text):
 # Eventi del bot
 @client.event
 async def on_ready():
-    print(f'🤖 {client.user} è online!\n')
+    print(f'\n🤖 {client.user} è online!\n')
+    print('📊 Statistiche del Bot:')
+    print(f'├── Server totali: {len(client.guilds)}')
+    print(f'└── Utenti totali: {len(set(client.get_all_members()))}')
+    
+    print('\n📋 Lista dei Server:')
+    for guild in client.guilds:
+        print(f'├── {guild.name} (ID: {guild.id})')
+        print(f'│   ├── Owner: {guild.owner}')
+        print(f'│   └── Membri: {guild.member_count}')
+    
     gaming_activities = [
         discord.Game("Minecraft"),
         discord.Game("Fortnite"),
@@ -319,10 +320,7 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    print(f"📩 Messaggio ricevuto da {message.author.name}: {message.content}")
-
-    if message.author != client.user and random.random() < 0.12:
-        await maybe_add_reaction(message)
+    await maybe_add_reaction(message)
 
     update_conversation_history(message.channel.id, message.author.id, message.author.name, message.content)
 
@@ -338,11 +336,47 @@ async def on_message(message):
             await message.channel.send(random.choice(choices))
             return
 
+        # Get server-specific context
+        guild_id = message.guild.id if message.guild else None
         channel_history = conversation_history.get(message.channel.id, [])
-        await simulate_typing(message.channel, prompt)
-        instruction = "Rispondi come un programmatore umano in una chat Discord."
-        response = await ask_openrouter(f"{instruction} Messaggio: {prompt}", channel_history, active_users)
+
+        # Gestione menzioni Discord
+        cleaned_prompt = prompt
+        if message.mentions:
+            for mention in message.mentions:
+                # Skip if it's our own mention
+                if mention.id == client.user.id:
+                    cleaned_prompt = cleaned_prompt.replace(f'<@{mention.id}>', 'me')
+                    continue
+                # Only allow mentions for users in the current server
+                if guild_id and message.guild.get_member(mention.id):
+                    cleaned_prompt = cleaned_prompt.replace(f'<@{mention.id}>', f'@{mention.display_name}')
+                else:
+                    cleaned_prompt = cleaned_prompt.replace(f'<@{mention.id}>', mention.name)
+
+        await simulate_typing(message.channel, cleaned_prompt)
+        response = await ask_openrouter(cleaned_prompt, channel_history, active_users)
         response = humanize_response(response)
+
+        # Gestione menzioni Discord
+        if guild_id:
+            for member in message.guild.members:
+                # Converti vecchi formati tag in nuovi
+                old_formats = [
+                    f'<@{member.id}>',
+                    f'<@!{member.id}>',
+                    f'@{member.name}',
+                    member.name
+                ]
+                for old_format in old_formats:
+                    if old_format in response:
+                        response = response.replace(old_format, f'<@{member.id}>')
+
+            # Assicurati che la risposta inizi con il tag se stiamo rispondendo all'utente
+            if message.author.id != client.user.id and not any(response.startswith(prefix) for prefix in ['<@', '@']):
+                response = f'<@{message.author.id}> {response}'
+
+
         await message.channel.send(response)
         update_conversation_history(message.channel.id, client.user.id, client.user.name, response)
         last_response_time[message.channel.id] = asyncio.get_event_loop().time()
@@ -374,7 +408,7 @@ async def on_message(message):
                     if random.random() < 0.4:
                         response = humanize_response(response)
                     if random.random() < 0.3:
-                        response = f"<@{message.author.id}> {response}"
+                        response = f"@{message.author.display_name} {response}"
                     await message.channel.send(response)
                     update_conversation_history(message.channel.id, client.user.id, client.user.name, response)
                     last_response_time[message.channel.id] = asyncio.get_event_loop().time()
@@ -391,7 +425,6 @@ async def on_message(message):
                 await message.channel.send(humanize_response(response))
         else:
             response = await generate_code(message.content)
-            response = f"Ecco il codice che ho generato:\n```python\n{response}\n```"
             await message.channel.send(humanize_response(response))
         return
 
@@ -399,14 +432,12 @@ async def on_message(message):
     if should_respond_to_message(message, lower_msg):
         channel_history = conversation_history.get(message.channel.id, [])
         await simulate_typing(message.channel, message.content)
-        instruction = "Sei Henry, un programmatore in una chat Discord."
-        prompt = f"{instruction} Messaggio: {message.content}"
-        response = await ask_openrouter(prompt, channel_history, active_users)
+        response = await ask_openrouter(message.content, channel_history, active_users)
         response = humanize_response(response)
 
         if random.random() < 0.25 and not any(f"<@{uid}" in response for uid in active_users.keys()):
             if message.author.id != client.user.id:
-                response = f"<@{message.author.id}> {response}"
+                response = f"@{message.author.display_name} {response}"
 
         await message.channel.send(response)
         update_conversation_history(message.channel.id, client.user.id, client.user.name, response)
